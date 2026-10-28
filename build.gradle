@@ -1,0 +1,116 @@
+plugins {
+	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+	id 'maven-publish'
+}
+
+// ============ MC 版本映射表（新增版本只改这里） ============
+ext {
+	mcVersions = [
+		"26.2": [
+			minecraft_version:  "26.2",
+			loader_version:     "0.19.5",
+			loom_version:       "1.18.3",
+			fabric_api_version:  "0.161.0+26.2"
+		],
+		"26.3": [
+			minecraft_version:  "26.3",
+			loader_version:     "0.19.5",
+			loom_version:       "1.18.3",
+			fabric_api_version:  "0.162.0+26.3"
+		]
+	]
+}
+
+// ============ 读 mc_target，覆盖 Gradle properties ============
+def mcTarget = project.hasProperty('mc_target') ? String.valueOf(project.property('mc_target')) : '26.2'
+def mcMap = mcVersions[mcTarget]
+if (mcMap == null) {
+	throw new GradleException("不支持的 mc_target=${mcTarget}；可用：${mcVersions.keySet()}")
+}
+project.ext.minecraft_version     = mcMap.minecraft_version
+project.ext.loader_version        = mcMap.loader_version
+project.ext.loom_version          = mcMap.loom_version
+project.ext.fabric_api_version    = mcMap.fabric_api_version
+// jar 名统一带 mc 后缀（让两个版本的 jar 可以在同一目录并存）
+project.ext.mc_version_tag        = mcTarget.replace('.', '_')
+// 部署目录：与 SC 产物同目录（f:\survivalcontract\mc26.2 / mc26.3）
+project.ext.deploySubDir          = "mc${mcTarget}"
+// 前置模组（生存契约）本地 jar——按 mc_target 选择对应版本
+project.ext.scJarFile             = file("libs/survival-contract-${project.sc_version}-mc${mc_version_tag}.jar")
+
+repositories {
+}
+
+loom {
+	splitEnvironmentSourceSets()
+
+	mods {
+		"hell-kitchen" {
+			sourceSet sourceSets.main
+			sourceSet sourceSets.client
+		}
+	}
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+	// 前置模组：生存契约（本地 jar）
+	// 本环境为非混淆（non-obfuscated）MC，不存在 remap 流程，直接以文件依赖加入编译/运行 classpath
+	// 未拷贝 SC jar 到 libs/ 时给出明确报错，避免隐晦的编译失败
+	if (!project.scJarFile.exists()) {
+		throw new GradleException("缺少前置模组 jar：${project.scJarFile}（请先运行 SC 的 deployJar 并拷贝到 hk-mod/libs/）")
+	}
+	implementation files(project.scJarFile)
+}
+
+processResources {
+	def version = project.version
+	inputs.property "version", version
+
+	filesMatching("fabric.mod.json") {
+		expand "version": version
+	}
+}
+
+// jar 名自动带 mc 后缀：hell-kitchen-1.0.0-mc26_2.jar
+jar {
+	def baseName = "hell-kitchen-${project.version}-mc${mc_version_tag}"
+	archiveFileName = "${baseName}.jar"
+}
+
+// 自动部署：build 完成后把 jar 复制到上级目录的 mc 子目录（与 SC 产物同目录）
+tasks.register('deployJar', Copy) {
+	dependsOn tasks.named('build')
+	group = 'hell-kitchen'
+	description = "Copies the MC ${mcTarget} mod jar to project parent / ${deploySubDir}/"
+	from(layout.buildDirectory.dir('libs'))
+	include "hell-kitchen-${project.version}-mc${mc_version_tag}.jar"
+	into rootProject.projectDir.parentFile.toPath().resolve(deploySubDir).toFile()
+	doNotTrackState('上级目录含 Gradle 无法读取的非本项目文件')
+}
+tasks.named('build') { finalizedBy 'deployJar' }
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 21
+}
+
+java {
+	withSourcesJar()
+
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
+}
+
+publishing {
+	publications {
+		create("mavenJava", MavenPublication) {
+			from components.java
+		}
+	}
+
+	repositories {
+	}
+}
