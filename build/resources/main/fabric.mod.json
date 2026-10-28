@@ -1,0 +1,31 @@
+{
+	"schemaVersion": 1,
+	"id": "hell-kitchen",
+	"version": "1.0.0",
+	"name": "Hell's Kitchen",
+	"description": "生存契约附属玩法「地狱厨房」：固定地图 + 套餐竞速 + 灶火竞逐（前置：生存契约 + 农夫乐事重织）",
+	"authors": [
+		"Hell's Kitchen Team"
+	],
+	"license": "MIT",
+	"icon": "assets/hell-kitchen/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.hellkitchen.HellKitchen"
+		],
+		"client": [
+			"com.hellkitchen.client.HellKitchenClient"
+		],
+		"survival-contract:playstyle": [
+			"com.hellkitchen.KitchenStyleProvider"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": ">=26.2",
+		"java": ">=21",
+		"fabric-api": "*",
+		"survival-contract": "*"
+	}
+}
